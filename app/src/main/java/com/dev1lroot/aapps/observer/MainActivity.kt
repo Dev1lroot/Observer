@@ -4,13 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.remember
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import com.dev1lroot.aapps.observer.ui.theme.ObserverTheme
 
 class MainActivity : ComponentActivity() {
@@ -19,29 +16,24 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ObserverTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                val navController = rememberNavController()
+                val prefs = remember { PreferencesManager(applicationContext) }
+
+                NavHost(navController = navController, startDestination = "streaming") {
+                    composable("streaming") {
+                        StreamingScreen(
+                            preferencesManager = prefs,
+                            onNavigateToSettings = { navController.navigate("settings") }
+                        )
+                    }
+                    composable("settings") {
+                        SettingsScreen(
+                            preferencesManager = prefs,
+                            onNavigateBack = { navController.popBackStack() }
+                        )
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    ObserverTheme {
-        Greeting("Android")
     }
 }
