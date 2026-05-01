@@ -21,6 +21,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -28,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -44,6 +46,10 @@ fun SettingsScreen(
     var fps by remember { mutableStateOf(preferencesManager.fps.toString()) }
     var videoBitrate by remember { mutableStateOf(preferencesManager.videoBitrateKbps.toString()) }
     var audioBitrate by remember { mutableStateOf(preferencesManager.audioBitrateKbps.toString()) }
+    var showTimestamp by remember { mutableStateOf(preferencesManager.showTimestamp) }
+    var showGps by remember { mutableStateOf(preferencesManager.showGps) }
+    var showCompass by remember { mutableStateOf(preferencesManager.showCompass) }
+    var showCrosshair by remember { mutableStateOf(preferencesManager.showCrosshair) }
     var saved by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -138,6 +144,34 @@ fun SettingsScreen(
                 singleLine = true
             )
 
+            HorizontalDivider()
+            SectionHeader("Overlays (burned into stream)")
+
+            OverlayToggle(
+                label = "Timestamp",
+                description = "Date and time",
+                checked = showTimestamp,
+                onCheckedChange = { showTimestamp = it; saved = false },
+            )
+            OverlayToggle(
+                label = "GPS",
+                description = "Latitude & longitude (requires location permission)",
+                checked = showGps,
+                onCheckedChange = { showGps = it; saved = false },
+            )
+            OverlayToggle(
+                label = "Compass",
+                description = "Bearing in degrees with cardinal direction",
+                checked = showCompass,
+                onCheckedChange = { showCompass = it; saved = false },
+            )
+            OverlayToggle(
+                label = "Crosshair",
+                description = "Center-point reticle",
+                checked = showCrosshair,
+                onCheckedChange = { showCrosshair = it; saved = false },
+            )
+
             Spacer(Modifier.height(8.dp))
 
             Button(
@@ -153,6 +187,10 @@ fun SettingsScreen(
                         videoBitrate.toIntOrNull() ?: PreferencesManager.DEFAULT_VIDEO_BITRATE
                     preferencesManager.audioBitrateKbps =
                         audioBitrate.toIntOrNull() ?: PreferencesManager.DEFAULT_AUDIO_BITRATE
+                    preferencesManager.showTimestamp = showTimestamp
+                    preferencesManager.showGps = showGps
+                    preferencesManager.showCompass = showCompass
+                    preferencesManager.showCrosshair = showCrosshair
                     saved = true
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -181,4 +219,28 @@ private fun SectionHeader(title: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 4.dp)
     )
+}
+
+@Composable
+private fun OverlayToggle(
+    label: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
 }

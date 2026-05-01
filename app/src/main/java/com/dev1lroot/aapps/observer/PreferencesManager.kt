@@ -31,6 +31,22 @@ class PreferencesManager(context: Context) {
         get() = prefs.getInt(KEY_AUDIO_BITRATE, DEFAULT_AUDIO_BITRATE)
         set(value) { prefs.edit().putInt(KEY_AUDIO_BITRATE, value).apply() }
 
+    var showTimestamp: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_TIMESTAMP, true)
+        set(value) { prefs.edit().putBoolean(KEY_SHOW_TIMESTAMP, value).apply() }
+
+    var showGps: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_GPS, false)
+        set(value) { prefs.edit().putBoolean(KEY_SHOW_GPS, value).apply() }
+
+    var showCompass: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_COMPASS, false)
+        set(value) { prefs.edit().putBoolean(KEY_SHOW_COMPASS, value).apply() }
+
+    var showCrosshair: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_CROSSHAIR, false)
+        set(value) { prefs.edit().putBoolean(KEY_SHOW_CROSSHAIR, value).apply() }
+
     companion object {
         private const val KEY_RTMP_URL = "rtmp_url"
         private const val KEY_VIDEO_WIDTH = "video_width"
@@ -38,6 +54,10 @@ class PreferencesManager(context: Context) {
         private const val KEY_FPS = "fps"
         private const val KEY_VIDEO_BITRATE = "video_bitrate_kbps"
         private const val KEY_AUDIO_BITRATE = "audio_bitrate_kbps"
+        private const val KEY_SHOW_TIMESTAMP = "show_timestamp"
+        private const val KEY_SHOW_GPS = "show_gps"
+        private const val KEY_SHOW_COMPASS = "show_compass"
+        private const val KEY_SHOW_CROSSHAIR = "show_crosshair"
 
         const val DEFAULT_RTMP_URL = "rtmp://your.server.com/live/stream"
         const val DEFAULT_WIDTH = 1280

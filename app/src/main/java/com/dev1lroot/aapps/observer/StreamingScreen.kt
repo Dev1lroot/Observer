@@ -59,6 +59,7 @@ fun StreamingScreen(
     var streamingState by remember { mutableStateOf<StreamingState>(StreamingState.Idle) }
     var statusMessage by remember { mutableStateOf("") }
     var timestamp by remember { mutableStateOf("") }
+    // Camera + audio are required to stream; location is optional (GPS overlay).
     var permissionsGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
@@ -69,7 +70,9 @@ fun StreamingScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        permissionsGranted = permissions.values.all { it }
+        permissionsGranted =
+            permissions[Manifest.permission.CAMERA] == true &&
+            permissions[Manifest.permission.RECORD_AUDIO] == true
     }
 
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
@@ -165,7 +168,8 @@ fun StreamingScreen(
                             permissionLauncher.launch(
                                 arrayOf(
                                     Manifest.permission.CAMERA,
-                                    Manifest.permission.RECORD_AUDIO
+                                    Manifest.permission.RECORD_AUDIO,
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
                                 )
                             )
                         }) { Text("Grant Permissions") }
@@ -228,6 +232,12 @@ fun StreamingScreen(
                                 streamingState = StreamingState.Error("Bad URL")
                                 return@Button
                             }
+                            streamer.overlayConfig = OverlayConfig(
+                                showTimestamp = preferencesManager.showTimestamp,
+                                showGps = preferencesManager.showGps,
+                                showCompass = preferencesManager.showCompass,
+                                showCrosshair = preferencesManager.showCrosshair,
+                            )
                             streamer.startStream(
                                 tv,
                                 url,

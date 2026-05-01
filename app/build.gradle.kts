@@ -51,8 +51,10 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.navigation.compose)
-    // FFmpeg-kit (min-gpl) — bundles x264 + librtmp, replaces RootEncoder
-    implementation("com.arthenica:ffmpeg-kit-min-gpl:6.0-2.LTS")
+    // FFmpeg-kit 6.0-2.LTS (min-gpl) — local AAR; Maven Central CDN fails to serve this artifact
+    // AAR downloaded from Alibaba mirror (sha256: 73ef45e50c569500485ff38b27244a9e8ce04e5c3adb04d8d394c922cb663fa7)
+    implementation(files("libs/ffmpeg-kit-min-gpl.aar"))
+    implementation("com.arthenica:smart-exception-java:0.2.1")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

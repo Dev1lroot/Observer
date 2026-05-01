@@ -4,11 +4,15 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.ImageFormat
 import android.graphics.Matrix
-import android.graphics.SurfaceTexture
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
-import android.hardware.camera2.CaptureRequest
+import android.location.LocationListener
+import android.location.LocationManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.Image
@@ -16,14 +20,20 @@ import android.media.ImageReader
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.util.Size
 import android.view.Surface
 import android.view.TextureView
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegKitConfig
+import com.arthenica.ffmpegkit.FFmpegSessionCompleteCallback
+import com.arthenica.ffmpegkit.LogCallback
 import com.arthenica.ffmpegkit.ReturnCode
 import java.io.FileOutputStream
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
@@ -47,7 +57,6 @@ class FFmpegStreamer(
     private var videoPipePath: String? = null
     private var audioPipePath: String? = null
 
-    // Small queue: if FFmpeg falls behind, drop frames rather than stall the camera thread
     private val frameQueue = LinkedBlockingQueue<ByteArray>(3)
 
     var capturedWidth = 0; private set
@@ -56,6 +65,66 @@ class FFmpegStreamer(
 
     @Volatile var isPreviewing = false; private set
     @Volatile var isStreaming = false; private set
+
+    // ── Overlay ──────────────────────────────────────────────────────────────
+
+    @Volatile var overlayConfig: OverlayConfig = OverlayConfig()
+
+    @Volatile private var currentLat: Double? = null
+    @Volatile private var currentLon: Double? = null
+    @Volatile private var currentCompass: Float? = null
+
+    private val overlayRenderer = OverlayRenderer()
+    private val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+
+    private val locationManager = context.getSystemService(LocationManager::class.java)
+    private val sensorManager = context.getSystemService(SensorManager::class.java)
+
+    private val locationListener = LocationListener { loc ->
+        currentLat = loc.latitude
+        currentLon = loc.longitude
+    }
+
+    private val rotVecListener = object : SensorEventListener {
+        private val rotMatrix = FloatArray(9)
+        private val orientation = FloatArray(3)
+        override fun onSensorChanged(event: SensorEvent) {
+            SensorManager.getRotationMatrixFromVector(rotMatrix, event.values)
+            SensorManager.getOrientation(rotMatrix, orientation)
+            val azimuth = Math.toDegrees(orientation[0].toDouble()).toFloat()
+            currentCompass = (azimuth + 360f) % 360f
+        }
+        override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun startSensors() {
+        val rotVec = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        if (rotVec != null) {
+            sensorManager.registerListener(
+                rotVecListener, rotVec, SensorManager.SENSOR_DELAY_UI, imageHandler
+            )
+        }
+        try {
+            val provider = when {
+                locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ->
+                    LocationManager.GPS_PROVIDER
+                locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) ->
+                    LocationManager.NETWORK_PROVIDER
+                else -> null
+            }
+            provider?.let {
+                locationManager.requestLocationUpdates(
+                    it, 1000L, 0f, locationListener, Looper.getMainLooper()
+                )
+            }
+        } catch (_: SecurityException) {}
+    }
+
+    private fun stopSensors() {
+        sensorManager.unregisterListener(rotVecListener)
+        try { locationManager.removeUpdates(locationListener) } catch (_: Exception) {}
+    }
 
     // ── Camera open + preview ────────────────────────────────────────────────
 
@@ -72,8 +141,7 @@ class FFmpegStreamer(
 
         val map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
         val bestSize = chooseBestSize(
-            map.getOutputSizes(ImageFormat.YUV_420_888),
-            reqWidth, reqHeight
+            map.getOutputSizes(ImageFormat.YUV_420_888), reqWidth, reqHeight
         )
         capturedWidth = bestSize.width
         capturedHeight = bestSize.height
@@ -88,6 +156,7 @@ class FFmpegStreamer(
             override fun onOpened(camera: CameraDevice) {
                 cameraDevice = camera
                 startPreviewSession(camera, previewSurface)
+                startSensors()
             }
             override fun onDisconnected(camera: CameraDevice) = camera.close()
             override fun onError(camera: CameraDevice, error: Int) = camera.close()
@@ -160,7 +229,19 @@ class FFmpegStreamer(
                         val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
                         val frame = image.toI420()
                         image.close()
-                        frameQueue.offer(frame) // non-blocking; drops if full
+
+                        val cfg = overlayConfig
+                        if (cfg.showCrosshair || cfg.showTimestamp || cfg.showGps || cfg.showCompass) {
+                            overlayRenderer.renderOntoI420(
+                                frame, capturedWidth, capturedHeight, sensorOrientation, cfg,
+                                if (cfg.showTimestamp) sdf.format(Date()) else "",
+                                if (cfg.showGps) currentLat else null,
+                                if (cfg.showGps) currentLon else null,
+                                if (cfg.showCompass) currentCompass else null,
+                            )
+                        }
+
+                        frameQueue.offer(frame)
                     }, imageHandler)
 
                     startVideoWriter(vPipe)
@@ -187,7 +268,6 @@ class FFmpegStreamer(
         imageReader = null
         frameQueue.clear()
 
-        // Reopen preview-only session
         val cam = cameraDevice ?: return
         val st = textureView.surfaceTexture ?: return
         st.setDefaultBufferSize(capturedWidth, capturedHeight)
@@ -207,6 +287,8 @@ class FFmpegStreamer(
         imageReader?.close()
         cameraThread.quitSafely()
         imageThread.quitSafely()
+        stopSensors()
+        overlayRenderer.release()
     }
 
     // ── Internals ────────────────────────────────────────────────────────────
@@ -257,7 +339,7 @@ class FFmpegStreamer(
         vPipe: String,
         aPipe: String,
     ) {
-        val transpose = if (sensorOrientation % 180 != 0) "-vf transpose=1" else ""
+        val transpose = "" // DO NOT FUCKING TOUCH
         val cmd = buildString {
             append("-f rawvideo -pixel_format yuv420p")
             append(" -video_size ${capturedWidth}x${capturedHeight}")
@@ -273,26 +355,31 @@ class FFmpegStreamer(
         }
 
         var connectionReported = false
-        FFmpegKit.executeAsync(cmd, { session ->
-            isStreaming = false
-            val rc = session.returnCode
-            when {
-                ReturnCode.isCancel(rc) -> onState(StreamingState.Idle, "")
-                ReturnCode.isSuccess(rc) -> onState(StreamingState.Idle, "Disconnected")
-                else -> {
-                    val tail = session.logsAsString.trimEnd().lines().takeLast(3).joinToString(" | ")
-                    onState(StreamingState.Error(tail), "Error — check logs")
+        FFmpegKit.executeAsync(
+            cmd,
+            FFmpegSessionCompleteCallback { session ->
+                isStreaming = false
+                val rc = session.returnCode
+                when {
+                    ReturnCode.isCancel(rc) -> onState(StreamingState.Idle, "")
+                    ReturnCode.isSuccess(rc) -> onState(StreamingState.Idle, "Disconnected")
+                    else -> {
+                        val tail = session.logsAsString.trimEnd().lines().takeLast(3).joinToString(" | ")
+                        onState(StreamingState.Error(tail), "Error — check logs")
+                    }
                 }
-            }
-        }, { log ->
-            if (!connectionReported) {
-                val msg = log.message
-                if (msg.contains("Output #0") || msg.contains("muxing overhead")) {
-                    connectionReported = true
-                    onState(StreamingState.Streaming, "Live")
+            },
+            LogCallback { log ->
+                if (!connectionReported) {
+                    val msg = log.getMessage()
+                    if (msg.contains("Output #0") || msg.contains("muxing overhead")) {
+                        connectionReported = true
+                        onState(StreamingState.Streaming, "Live")
+                    }
                 }
-            }
-        })
+            },
+            null, // StatisticsCallback not needed
+        )
     }
 
     private fun closePipes() {
@@ -305,7 +392,6 @@ class FFmpegStreamer(
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private fun chooseBestSize(sizes: Array<Size>, reqW: Int, reqH: Int): Size {
-        // Camera sensor at 90°/270° captures landscape; swap so target is also landscape
         val (tw, th) = if (sensorOrientation % 180 != 0)
             Pair(max(reqW, reqH), min(reqW, reqH))
         else
@@ -322,8 +408,7 @@ class FFmpegStreamer(
         val cy = vh / 2f
         val matrix = Matrix()
         if (sensorOrientation % 180 != 0) {
-            // Rotate so portrait device shows portrait camera content
-            matrix.postRotate(sensorOrientation.toFloat(), cx, cy)
+            //matrix.postRotate(90f, cx, cy) // DO NOT FUCKING TOUCH
             val scale = max(vw.toFloat() / capturedHeight, vh.toFloat() / capturedWidth)
             matrix.postScale(scale, scale, cx, cy)
         }
