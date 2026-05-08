@@ -41,6 +41,36 @@ The primary mission of Observer is to safeguard evidence in real-time. By offloa
    * Ensure you have the Android SDK 36 platform installed.
    * Build the APK and install it on your device.
 
+---
+
+## Quick Start: Client Setup
+
+To begin streaming, configure the following in the app settings:
+
+1. **Server URL:** Enter your RTMP server address. 
+   * *Example:* `rtmp://your-server-ip:1935/live`
+2. **Stream Key:** Enter a unique identifier for your stream.
+   * *Example:* `secure_backup_01`
+3. **Start:** Tap the record button. The stream begins transmission immediately.
+
+---
+
+## Server Deployment
+
+To receive the footage, you need an RTMP ingest server. 
+
+### Easiest Method: MediaMTX (Standalone)
+The simplest way to deploy a server is using **MediaMTX**. It is a single executable that requires no installation or complex dependencies.
+
+1. **Download:** Go to the [MediaMTX Releases page](https://github.com/bluenviron/mediamtx/releases).
+2. **Select your version:** Download the binary for your OS (e.g., `mediamtx_vX.X.X_linux_amd64.tar.gz` for Linux or the `windows_amd64.zip` for Windows).
+3. **Extract & Run:**
+   * **Linux/macOS:** Extract the file and run `./mediamtx`.
+   * **Windows:** Extract the zip and double-click `mediamtx.exe`.
+4. **Result:** Your server is now live and listening for RTMP connections on port **1935**.
+
+---
+
 ## Contributing
 
 As a FOSS project, contributions are welcome. Whether it is improving the UI for better accessibility, optimizing the streaming buffer, or enhancing security protocols, feel free to open a pull request or report issues.
